@@ -1,0 +1,6 @@
+pandas
+pyarrow
+pdfplumber
+openai
+pyyaml
+# vllm  # uncomment for local model inference (requires Linux + GPU)

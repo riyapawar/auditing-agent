@@ -1,0 +1,272 @@
+# Audit Knowledge Graph Extraction Config
+# Drop this into the graphmert/graphrag/ directory alongside extraction_config.yaml
+# Run with: python extract_kg.py --root <data_dir> --extraction_config extraction_config_audit.yaml
+
+llm_config:
+  model_path: "/path/to/your/local/model"  # e.g. Qwen3-14B or any instruction-tuned model
+  temperature: 0.2   # lower than biomedical — regulatory text needs precision over diversity
+  top_p: 0.9
+  max_tokens: 4096
+  batch_size: 50
+  max_model_len: 16000
+  tensor_parallel_size: 1
+
+completion_delimiter: "<|COMPLETE|>"
+tuple_delimiter: "<|>"
+record_delimiter: "##"
+
+# --- Entity Types ---
+entity_types:
+  - Accounting Standard      # ASC 606, IFRS 15, ASC 842, 2 CFR Part 200
+  - Accounting Concept       # performance obligation, transaction price, variable consideration
+  - Transaction Type         # subscription revenue, milestone billing, license, refund
+  - Financial Account        # deferred revenue, contract asset, accounts receivable
+  - Compliance Rule          # a specific testable requirement extracted from a standard
+
+entity_types_examples: |
+  1. Accounting Standard: ASC 606; IFRS 15; ASC 842; ASC 340-40; 2 CFR Part 200; FASB ASU 2014-09
+  2. Accounting Concept: performance obligation; transaction price; standalone selling price;
+     variable consideration; contract modification; control transfer; contract asset;
+     incremental costs of obtaining a contract; practical expedient
+  3. Transaction Type: subscription revenue; milestone-based payment; usage-based fee;
+     software license; professional services contract; grant funding; refund liability;
+     sales with right of return; bill-and-hold arrangement
+  4. Financial Account: deferred revenue; contract liability; contract asset; accounts receivable;
+     revenue; cost of revenue; refund liability; capitalized contract cost
+  5. Compliance Rule: five-step revenue recognition model; variable consideration constraint;
+     performance obligation satisfaction criteria; standalone selling price allocation rule;
+     contract combination rule; contract modification accounting rule
+
+# --- Relation Types ---
+# Chosen to encode both descriptive KG structure AND audit-execution semantics
+relation_types:
+  - supersedes           # standard/section supersedes an older version
+  - defined_in           # concept is formally defined in a standard or section
+  - applies_to           # rule applies to a specific transaction type or account
+  - depends_on           # rule can only be evaluated after another rule passes
+  - requires             # concept requires another concept or condition to exist
+  - prohibits            # rule prohibits a specific condition or value
+  - recognized_when      # revenue/amount recognized when a condition is met
+  - deferred_until       # recognition deferred until a condition is satisfied
+  - allocated_across     # transaction price allocated across performance obligations
+  - modified_by          # rule is modified or overridden by an exception or amendment
+  - equivalent_to        # cross-standard conceptual equivalence (e.g., GAAP vs IFRS)
+  - component_of         # part-whole: concept is a component of a larger concept
+  - constrained_by       # amount is constrained by a specific criterion
+
+relation_types_examples: |
+  asc 606, supersedes, asc 605
+  performance obligation, defined_in, asc 606-10-25-14
+  revenue recognition rule, applies_to, subscription revenue
+  control transfer test, depends_on, performance obligation identification
+  revenue recognition, requires, control transfer
+  variable consideration constraint, prohibits, probable significant reversal
+  revenue, recognized_when, performance obligation satisfied
+  upfront payment, deferred_until, service delivery complete
+  transaction price, allocated_across, performance obligations
+  general revenue recognition rule, modified_by, right-of-return exception
+  performance obligation, equivalent_to, ifrs 15 performance obligation
+  five-step model, component_of, asc 606 revenue recognition framework
+  variable consideration, constrained_by, probable significant reversal criterion
+
+prompt_template: |
+  -Role-
+  You are an expert in US GAAP, IFRS, and federal grant compliance standards.
+  Your task is to extract a structured knowledge graph from accounting regulation text.
+
+  -Goal-
+  Given a section of accounting regulation text, a predefined list of entity types,
+  and a predefined list of relation types, identify all entities and the relationships
+  between them that are explicitly described in the text.
+  Focus on extracting relationships that are structurally important for compliance:
+  what depends on what, what applies where, when things are recognized or deferred.
+
+  -Entity Types-
+  Extract entities from the following types only:
+  {entity_types}
+
+  Examples of each type:
+  {entity_types_examples}
+
+  -Relation Types-
+  Use only the following relation types:
+  {relation_types}
+
+  One example per relation type:
+  {relation_types_examples}
+
+  -Steps-
+  1. Identify all entities in the text that match one of the entity types above.
+     For each entity, extract:
+     - entity_name: lowercase, specific (e.g. "performance obligation", not "obligation")
+     - entity_type: one of the five types above
+     - entity_description: one sentence describing this entity as defined in this text
+     Format: ("entity"{tuple_delimiter}<entity_name>{tuple_delimiter}<entity_type>{tuple_delimiter}<entity_description>)
+
+  2. From the identified entities, extract all meaningful relationships using only
+     the predefined relation types. Focus on relationships that express:
+     - when something is recognized, deferred, or constrained
+     - what a rule applies to or depends on
+     - how concepts relate to standards and sections
+     For each relationship:
+     - source_entity: name from step 1
+     - target_entity: name from step 1
+     - relationship: one type from the predefined list
+     - relationship_strength: 1-10 (10 = explicitly stated, 5 = strongly implied)
+     Format: ("relationship"{tuple_delimiter}<source>{tuple_delimiter}<target>{tuple_delimiter}<relationship>{tuple_delimiter}<strength>)
+
+  3. Output all entities and relationships as a single list separated by {record_delimiter}.
+  4. End with {completion_delimiter}
+
+  -Constraints-
+  - Only extract what is explicitly stated or directly implied in the provided text.
+  - Use the exact entity names as they appear (lowercase) — do not paraphrase.
+  - If a section cross-references another (e.g. "see paragraph 606-10-32-2"),
+    create an entity for the referenced section and add a depends_on or defined_in edge.
+  - Prefer precision over recall: a missing edge is better than a wrong edge.
+
+user_prompt: |
+  ######################
+  Text:
+  {input_text}
+  ######################
+  Output:
+
+examples:
+  # --- Example 1: ASC 606-10-25-1 (core recognition principle) ---
+  - user: |
+      ######################
+      Text:
+      606-10-25-1 An entity shall recognize revenue to depict the transfer of promised goods or
+      services to customers in an amount that reflects the consideration to which the entity expects
+      to be entitled in exchange for those goods or services. To achieve that core principle, an
+      entity shall apply the following steps: Step 1: Identify the contract with a customer.
+      Step 2: Identify the performance obligations in the contract. Step 3: Determine the
+      transaction price. Step 4: Allocate the transaction price to the performance obligations
+      in the contract. Step 5: Recognize revenue when (or as) the entity satisfies a
+      performance obligation.
+      ######################
+      Output:
+    assistant: |
+      ("entity"{tuple_delimiter}revenue recognition{tuple_delimiter}Compliance Rule{tuple_delimiter}The core principle requiring revenue to depict transfer of goods or services at the consideration the entity expects to receive.)
+      {record_delimiter}
+      ("entity"{tuple_delimiter}asc 606-10-25-1{tuple_delimiter}Accounting Standard{tuple_delimiter}The paragraph establishing the five-step revenue recognition model under ASC 606.)
+      {record_delimiter}
+      ("entity"{tuple_delimiter}performance obligation{tuple_delimiter}Accounting Concept{tuple_delimiter}A promise in a contract to transfer a distinct good or service to a customer.)
+      {record_delimiter}
+      ("entity"{tuple_delimiter}transaction price{tuple_delimiter}Accounting Concept{tuple_delimiter}The amount of consideration an entity expects to receive in exchange for transferring goods or services.)
+      {record_delimiter}
+      ("entity"{tuple_delimiter}control transfer{tuple_delimiter}Accounting Concept{tuple_delimiter}The event that triggers revenue recognition — when control of a good or service passes to the customer.)
+      {record_delimiter}
+      ("entity"{tuple_delimiter}five-step revenue recognition model{tuple_delimiter}Compliance Rule{tuple_delimiter}The sequential five-step process mandated by ASC 606 for recognizing revenue.)
+      {record_delimiter}
+      ("entity"{tuple_delimiter}contract with customer{tuple_delimiter}Accounting Concept{tuple_delimiter}An agreement between an entity and a customer that creates enforceable rights and obligations.)
+      {record_delimiter}
+      ("relationship"{tuple_delimiter}revenue recognition{tuple_delimiter}control transfer{tuple_delimiter}recognized_when{tuple_delimiter}10)
+      {record_delimiter}
+      ("relationship"{tuple_delimiter}revenue recognition{tuple_delimiter}performance obligation{tuple_delimiter}recognized_when{tuple_delimiter}10)
+      {record_delimiter}
+      ("relationship"{tuple_delimiter}five-step revenue recognition model{tuple_delimiter}asc 606-10-25-1{tuple_delimiter}defined_in{tuple_delimiter}10)
+      {record_delimiter}
+      ("relationship"{tuple_delimiter}transaction price{tuple_delimiter}performance obligation{tuple_delimiter}allocated_across{tuple_delimiter}9)
+      {record_delimiter}
+      ("relationship"{tuple_delimiter}five-step revenue recognition model{tuple_delimiter}revenue recognition{tuple_delimiter}component_of{tuple_delimiter}10)
+      {record_delimiter}
+      ("relationship"{tuple_delimiter}revenue recognition{tuple_delimiter}contract with customer{tuple_delimiter}requires{tuple_delimiter}9)
+      {completion_delimiter}
+
+  # --- Example 2: ASC 606-10-25-14 (performance obligation identification) ---
+  - user: |
+      ######################
+      Text:
+      606-10-25-14 At contract inception, an entity shall assess the goods or services promised
+      in a contract with a customer and shall identify as a performance obligation each promise
+      to transfer to the customer either of the following: a. A good or service (or a bundle of
+      goods or services) that is distinct. b. A series of distinct goods or services that are
+      substantially the same and that have the same pattern of transfer to the customer.
+      606-10-25-19 A good or service that is promised to a customer is distinct if both of the
+      following criteria are met: a. The customer can benefit from the good or service either
+      on its own or together with other resources that are readily available to the customer.
+      b. The entity's promise to transfer the good or service to the customer is separately
+      identifiable from other promises in the contract.
+      ######################
+      Output:
+    assistant: |
+      ("entity"{tuple_delimiter}performance obligation identification{tuple_delimiter}Compliance Rule{tuple_delimiter}The requirement to identify each distinct good or service as a separate performance obligation at contract inception.)
+      {record_delimiter}
+      ("entity"{tuple_delimiter}performance obligation{tuple_delimiter}Accounting Concept{tuple_delimiter}A promise to transfer a distinct good or service, identified at contract inception.)
+      {record_delimiter}
+      ("entity"{tuple_delimiter}distinct good or service{tuple_delimiter}Accounting Concept{tuple_delimiter}A good or service that meets both distinctness criteria: customer can benefit from it, and the promise is separately identifiable.)
+      {record_delimiter}
+      ("entity"{tuple_delimiter}contract inception{tuple_delimiter}Accounting Concept{tuple_delimiter}The point in time at which an entity assesses and identifies performance obligations in a contract.)
+      {record_delimiter}
+      ("entity"{tuple_delimiter}series of distinct goods or services{tuple_delimiter}Transaction Type{tuple_delimiter}Substantially identical goods or services with the same transfer pattern, treated as a single performance obligation.)
+      {record_delimiter}
+      ("entity"{tuple_delimiter}separately identifiable promise{tuple_delimiter}Accounting Concept{tuple_delimiter}A promise that is not highly interrelated with other promises in the contract and can be transferred independently.)
+      {record_delimiter}
+      ("entity"{tuple_delimiter}asc 606-10-25-14{tuple_delimiter}Accounting Standard{tuple_delimiter}The paragraph requiring performance obligation identification at contract inception.)
+      {record_delimiter}
+      ("entity"{tuple_delimiter}asc 606-10-25-19{tuple_delimiter}Accounting Standard{tuple_delimiter}The paragraph defining the two criteria for a good or service to be considered distinct.)
+      {record_delimiter}
+      ("relationship"{tuple_delimiter}performance obligation identification{tuple_delimiter}contract inception{tuple_delimiter}requires{tuple_delimiter}10)
+      {record_delimiter}
+      ("relationship"{tuple_delimiter}performance obligation{tuple_delimiter}distinct good or service{tuple_delimiter}requires{tuple_delimiter}10)
+      {record_delimiter}
+      ("relationship"{tuple_delimiter}performance obligation identification{tuple_delimiter}asc 606-10-25-14{tuple_delimiter}defined_in{tuple_delimiter}10)
+      {record_delimiter}
+      ("relationship"{tuple_delimiter}distinct good or service{tuple_delimiter}asc 606-10-25-19{tuple_delimiter}defined_in{tuple_delimiter}10)
+      {record_delimiter}
+      ("relationship"{tuple_delimiter}performance obligation identification{tuple_delimiter}five-step revenue recognition model{tuple_delimiter}component_of{tuple_delimiter}9)
+      {record_delimiter}
+      ("relationship"{tuple_delimiter}series of distinct goods or services{tuple_delimiter}performance obligation{tuple_delimiter}equivalent_to{tuple_delimiter}8)
+      {record_delimiter}
+      ("relationship"{tuple_delimiter}separately identifiable promise{tuple_delimiter}distinct good or service{tuple_delimiter}component_of{tuple_delimiter}9)
+      {completion_delimiter}
+
+  # --- Example 3: ASC 606-10-32-11 (variable consideration constraint) ---
+  - user: |
+      ######################
+      Text:
+      606-10-32-11 An entity shall include in the transaction price some or all of an amount of
+      variable consideration estimated in accordance with paragraph 606-10-32-8 only to the extent
+      that it is probable that a significant reversal in the amount of cumulative revenue recognized
+      will not occur when the uncertainty associated with the variable consideration is subsequently
+      resolved.
+      606-10-32-14 To assess whether it is probable that a significant reversal in the amount of
+      cumulative revenue recognized will not occur once the uncertainty is resolved, an entity
+      shall consider both the likelihood and the magnitude of the revenue reversal. Factors that
+      could increase the likelihood or the magnitude of a revenue reversal include, but are not
+      limited to, the following: a. The amount of consideration is highly susceptible to factors
+      outside the entity's influence. b. The uncertainty about the amount of consideration is not
+      expected to be resolved for a long period of time.
+      ######################
+      Output:
+    assistant: |
+      ("entity"{tuple_delimiter}variable consideration constraint{tuple_delimiter}Compliance Rule{tuple_delimiter}The rule limiting inclusion of variable consideration in transaction price to amounts where significant revenue reversal is not probable.)
+      {record_delimiter}
+      ("entity"{tuple_delimiter}variable consideration{tuple_delimiter}Accounting Concept{tuple_delimiter}Consideration whose amount depends on the outcome of future events, such as discounts, rebates, refunds, or royalties.)
+      {record_delimiter}
+      ("entity"{tuple_delimiter}transaction price{tuple_delimiter}Accounting Concept{tuple_delimiter}The amount of consideration included in revenue recognition, constrained by the probable reversal criterion.)
+      {record_delimiter}
+      ("entity"{tuple_delimiter}probable significant reversal{tuple_delimiter}Accounting Concept{tuple_delimiter}The threshold test determining whether variable consideration can be included — inclusion is prohibited if significant reversal is probable.)
+      {record_delimiter}
+      ("entity"{tuple_delimiter}cumulative revenue recognized{tuple_delimiter}Financial Account{tuple_delimiter}The total revenue recognized to date under a contract, subject to potential reversal if variable consideration is overestimated.)
+      {record_delimiter}
+      ("entity"{tuple_delimiter}asc 606-10-32-11{tuple_delimiter}Accounting Standard{tuple_delimiter}The paragraph establishing the variable consideration constraint on transaction price.)
+      {record_delimiter}
+      ("entity"{tuple_delimiter}asc 606-10-32-14{tuple_delimiter}Accounting Standard{tuple_delimiter}The paragraph providing factors for assessing probability of significant revenue reversal.)
+      {record_delimiter}
+      ("relationship"{tuple_delimiter}variable consideration constraint{tuple_delimiter}transaction price{tuple_delimiter}applies_to{tuple_delimiter}10)
+      {record_delimiter}
+      ("relationship"{tuple_delimiter}variable consideration{tuple_delimiter}transaction price{tuple_delimiter}component_of{tuple_delimiter}9)
+      {record_delimiter}
+      ("relationship"{tuple_delimiter}variable consideration constraint{tuple_delimiter}probable significant reversal{tuple_delimiter}constrained_by{tuple_delimiter}10)
+      {record_delimiter}
+      ("relationship"{tuple_delimiter}variable consideration constraint{tuple_delimiter}probable significant reversal{tuple_delimiter}prohibits{tuple_delimiter}10)
+      {record_delimiter}
+      ("relationship"{tuple_delimiter}variable consideration constraint{tuple_delimiter}asc 606-10-32-11{tuple_delimiter}defined_in{tuple_delimiter}10)
+      {record_delimiter}
+      ("relationship"{tuple_delimiter}probable significant reversal{tuple_delimiter}asc 606-10-32-14{tuple_delimiter}defined_in{tuple_delimiter}9)
+      {record_delimiter}
+      ("relationship"{tuple_delimiter}variable consideration constraint{tuple_delimiter}variable consideration constraint{tuple_delimiter}depends_on{tuple_delimiter}8)
+      {completion_delimiter}
