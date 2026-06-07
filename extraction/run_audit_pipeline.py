@@ -62,7 +62,7 @@ input:
   type: file
   file_type: text
   base_dir: "{input_dir}"
-  file_pattern: ".*\\.txt$"
+  file_pattern: ".*\\.txt"
 
 output:
   type: file
