@@ -46,6 +46,13 @@ CFR_SECTION_RE = re.compile(
     re.MULTILINE
 )
 
+# Big 4 guide style: "3.1 Overview", "3.2.10 How to assess collectibility"
+# Requires a decimal (so bare numbers like "1" or "606" don't match)
+BIG4_SECTION_RE = re.compile(
+    r'^(\d{1,2}\.\d{1,3}(?:\.\d{1,3})?)\.?\s{1,4}([A-Z][^\n]{2,80})$',
+    re.MULTILINE
+)
+
 
 def _detect_standard(text: str) -> str:
     if re.search(r'\b606-10\b', text):
@@ -70,23 +77,38 @@ def _parent_section(section_id: str) -> str:
     return '-'.join(parts[:-1]) if len(parts) > 1 else ''
 
 
+def _detect_pattern(raw_text: str, standard: str):
+    """Pick and validate the best regex pattern for this document."""
+    candidates = {
+        "asc": ASC_SECTION_RE,
+        "big4": BIG4_SECTION_RE,
+        "ifrs": IFRS_SECTION_RE,
+        "cfr": CFR_SECTION_RE,
+    }
+    if standard in ("IFRS 15", "IFRS 17"):
+        return IFRS_SECTION_RE
+    if standard == "2 CFR Part 200":
+        return CFR_SECTION_RE
+
+    # Count matches for ASC vs Big 4 style and use whichever finds more
+    asc_hits = len(ASC_SECTION_RE.findall(raw_text[:50000]))
+    big4_hits = len(BIG4_SECTION_RE.findall(raw_text[:50000]))
+
+    if big4_hits > asc_hits * 2:
+        return BIG4_SECTION_RE
+    return ASC_SECTION_RE
+
+
 def chunk_text(raw_text: str, standard: str = None) -> list[RegulationChunk]:
     """
     Split regulatory text into section-level chunks.
     Detects section numbers and uses them as chunk boundaries.
+    Falls back to page-window chunking when too few sections are found.
     """
     if standard is None:
         standard = _detect_standard(raw_text)
 
-    # Choose the right pattern
-    if standard in ("ASC 606", "ASC 842"):
-        pattern = ASC_SECTION_RE
-    elif standard in ("IFRS 15", "IFRS 17"):
-        pattern = IFRS_SECTION_RE
-    elif standard == "2 CFR Part 200":
-        pattern = CFR_SECTION_RE
-    else:
-        pattern = ASC_SECTION_RE  # default fallback
+    pattern = _detect_pattern(raw_text, standard)
 
     lines = raw_text.splitlines()
     chunks = []
@@ -133,20 +155,48 @@ def chunk_text(raw_text: str, standard: str = None) -> list[RegulationChunk]:
     return chunks
 
 
-def chunk_pdf(pdf_path: str, standard: str = None) -> list[RegulationChunk]:
+def chunk_pdf(pdf_path: str, standard: str = None, page_window: int = 3) -> list[RegulationChunk]:
     try:
         import pdfplumber
     except ImportError:
         raise ImportError("Install pdfplumber: pip install pdfplumber")
 
     with pdfplumber.open(pdf_path) as pdf:
-        pages = []
-        for page in pdf.pages:
-            text = page.extract_text()
-            if text:
-                pages.append(text)
-    full_text = '\n'.join(pages)
-    return chunk_text(full_text, standard)
+        page_texts = [p.extract_text() or "" for p in pdf.pages]
+        total_pages = len(page_texts)
+
+    full_text = '\n'.join(page_texts)
+    chunks = chunk_text(full_text, standard)
+
+    # If section detection found fewer than 1 chunk per 10 pages, fall back to
+    # sliding page windows so no content is lost
+    if len(chunks) < total_pages / 10:
+        print(f"Warning: only {len(chunks)} sections detected in {total_pages} pages. "
+              f"Falling back to {page_window}-page window chunking.")
+        chunks = _chunk_by_page_window(page_texts, standard or _detect_standard(full_text), page_window)
+
+    return chunks
+
+
+def _chunk_by_page_window(page_texts: list[str], standard: str, window: int = 3) -> list[RegulationChunk]:
+    """Fallback: group pages into fixed windows when section detection fails."""
+    chunks = []
+    for i in range(0, len(page_texts), window):
+        group = page_texts[i:i + window]
+        text = '\n'.join(group).strip()
+        if len(text) < 50:
+            continue
+        section_id = f"p{i+1}-{min(i+window, len(page_texts))}"
+        chunks.append(RegulationChunk(
+            id=f"{standard.replace(' ', '')}-{section_id}",
+            section=section_id,
+            standard=standard,
+            title=f"Pages {i+1}–{min(i+window, len(page_texts))}",
+            text=text,
+            parent="",
+            depth=1,
+        ))
+    return chunks
 
 
 def write_graphrag_input(chunks: list[RegulationChunk], output_dir: str):
