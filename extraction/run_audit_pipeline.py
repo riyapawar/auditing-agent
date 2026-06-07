@@ -58,11 +58,23 @@ def _build_graphrag_settings(input_dir: str, output_dir: str) -> Path:
     settings_path = Path(output_dir) / "settings.yaml"
     settings_path.parent.mkdir(parents=True, exist_ok=True)
     settings_path.write_text(f"""
+models:
+  default_chat_model:
+    type: openai_chat
+    api_key: ${{OPENAI_API_KEY}}
+    model: gpt-4o-mini
+    api_base: https://api.openai.com/v1
+  default_embedding_model:
+    type: openai_embedding
+    api_key: ${{OPENAI_API_KEY}}
+    model: text-embedding-3-small
+    api_base: https://api.openai.com/v1
+
 input:
   type: file
   file_type: text
   base_dir: "{input_dir}"
-  file_pattern: '.*\.txt'
+  file_pattern: '.*\\.txt'
 
 output:
   type: file
