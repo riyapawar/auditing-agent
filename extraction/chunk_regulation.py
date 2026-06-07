@@ -67,12 +67,17 @@ def _detect_standard(text: str) -> str:
 
 
 def _section_depth(section_id: str) -> int:
-    """Infer nesting depth from number of '-' separated parts."""
-    parts = section_id.replace('§', '').strip().split('-')
-    return min(len(parts) - 1, 3)
+    """Infer nesting depth. Handles both ASC (606-10-25-1) and Big4 (3.2.10) formats."""
+    s = section_id.replace('§', '').strip()
+    if '.' in s:
+        return min(s.count('.'), 3)
+    return min(len(s.split('-')) - 1, 3)
 
 
 def _parent_section(section_id: str) -> str:
+    if '.' in section_id:
+        parts = section_id.split('.')
+        return '.'.join(parts[:-1]) if len(parts) > 1 else ''
     parts = section_id.split('-')
     return '-'.join(parts[:-1]) if len(parts) > 1 else ''
 
@@ -109,9 +114,12 @@ def chunk_text(raw_text: str, standard: str = None) -> list[RegulationChunk]:
         standard = _detect_standard(raw_text)
 
     pattern = _detect_pattern(raw_text, standard)
+    is_big4 = pattern == BIG4_SECTION_RE
+    min_text_len = 150 if is_big4 else 20  # Big4 ToC stubs are < 150 chars
 
     lines = raw_text.splitlines()
     chunks = []
+    seen_ids: dict[str, int] = {}  # id -> count, for deduplication
     current_section = None
     current_title = ""
     current_lines = []
@@ -120,10 +128,15 @@ def chunk_text(raw_text: str, standard: str = None) -> list[RegulationChunk]:
         if not section or not lines:
             return None
         text = '\n'.join(lines).strip()
-        if len(text) < 20:  # skip trivially short chunks
+        if len(text) < min_text_len:
             return None
+        base_id = f"{standard.replace(' ', '')}-{section}"
+        # Deduplicate: append counter for repeated section numbers
+        count = seen_ids.get(base_id, 0)
+        seen_ids[base_id] = count + 1
+        chunk_id = base_id if count == 0 else f"{base_id}-{count + 1}"
         return RegulationChunk(
-            id=f"{standard.replace(' ', '')}-{section}",
+            id=chunk_id,
             section=section,
             standard=standard,
             title=title,
@@ -135,7 +148,6 @@ def chunk_text(raw_text: str, standard: str = None) -> list[RegulationChunk]:
     for line in lines:
         match = pattern.match(line.strip())
         if match:
-            # Save previous chunk
             if current_section:
                 chunk = flush(current_section, current_title, current_lines, standard)
                 if chunk:
@@ -146,7 +158,6 @@ def chunk_text(raw_text: str, standard: str = None) -> list[RegulationChunk]:
         else:
             current_lines.append(line)
 
-    # Flush final chunk
     if current_section:
         chunk = flush(current_section, current_title, current_lines, standard)
         if chunk:
