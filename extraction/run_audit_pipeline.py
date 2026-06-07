@@ -92,7 +92,7 @@ def run_pipeline_stages(input_dir: str, output_dir: str, stages: list[str], stan
         sys.exit(1)
 
     settings_path = _build_graphrag_settings(input_dir, output_dir)
-    config = load_config(Path(output_dir), str(settings_path), {})
+    config = load_config(Path(output_dir), settings_path, {})
 
     storage_config = config.output.model_dump()
     storage = StorageFactory().create_storage(
