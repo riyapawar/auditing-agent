@@ -55,6 +55,13 @@ def _require_graphmert():
 
 def _build_graphrag_settings(input_dir: str, output_dir: str) -> Path:
     """Write a minimal settings.yaml for GraphRAG pointing at our input/output dirs."""
+    # Use absolute paths — GraphRAG resolves relative paths against root_dir
+    # which causes doubling if root_dir itself is relative
+    abs_input = str(Path(input_dir).resolve())
+    abs_output = str(Path(output_dir).resolve())
+    abs_artifacts = str(Path(output_dir).resolve() / "artifacts")
+    abs_cache = str(Path(output_dir).resolve() / "cache")
+
     settings_path = Path(output_dir) / "settings.yaml"
     settings_path.parent.mkdir(parents=True, exist_ok=True)
     settings_path.write_text(f"""
@@ -73,18 +80,18 @@ models:
 input:
   type: file
   file_type: text
-  base_dir: "{input_dir}"
+  base_dir: "{abs_input}"
   file_pattern: '.*\\.txt'
 
 output:
   type: file
-  base_dir: "{output_dir}/artifacts"
+  base_dir: "{abs_artifacts}"
 
 cache:
   type: file
-  base_dir: "{output_dir}/cache"
+  base_dir: "{abs_cache}"
 
-root_dir: "{output_dir}"
+root_dir: "{abs_output}"
 """)
     return settings_path
 
@@ -117,21 +124,23 @@ def run_pipeline_stages(input_dir: str, output_dir: str, stages: list[str], stan
     context = create_run_context(storage=storage, cache=cache, stats=None)
     callback_chain = WorkflowCallbacksManager()
 
-    # Import pipeline stages from graphmert
+    # extract_kg.py imports vLLM at module level — mock it before importing
+    # so the module loads cleanly on Windows where vLLM isn't available
+    try:
+        import vllm  # noqa: F401
+    except ImportError:
+        from unittest.mock import MagicMock
+        sys.modules["vllm"] = MagicMock()
+
     sys.path.insert(0, str(GRAPHMERT_DIR))
     from extract_kg import (
         pipeline_1, pipeline_2, pipeline_4, pipeline_5,
         load_extraction_config,
     )
 
-    # Use OpenAI adapter for pipeline 3 — vLLM is Linux-only and won't run on Windows
-    try:
-        from vllm import LLM  # noqa: F401 — just checking availability
-        from extract_kg import pipeline_3
-        logger.info("vLLM available — using local model for pipeline 3")
-    except ImportError:
-        from pipeline3_openai import pipeline_3_openai as pipeline_3  # type: ignore
-        logger.info("vLLM not available — using OpenAI API for pipeline 3")
+    # Always use our OpenAI adapter for pipeline 3 on Windows
+    from pipeline3_openai import pipeline_3_openai as pipeline_3  # type: ignore
+    logger.info("Using OpenAI API for pipeline 3")
 
     extraction_config = load_extraction_config(str(extraction_config_path))
 
