@@ -96,6 +96,40 @@ root_dir: "{abs_output}"
     return settings_path
 
 
+async def _pipeline_1_simple(context, input_dir: str):
+    """
+    Lightweight replacement for pipeline_1.
+    Reads chunk .txt files directly — no spacy, no torch, no NLP stack.
+    Produces the same 'text_units' table that pipelines 3/4/5 consume.
+    """
+    import pandas as pd
+    from graphrag.utils.storage import write_table_to_storage
+
+    txt_files = sorted(Path(input_dir).glob("*.txt"))
+    if not txt_files:
+        logger.error(f"No .txt files found in {input_dir}. Run chunk_regulation.py first.")
+        sys.exit(1)
+
+    rows = []
+    for txt_file in txt_files:
+        text = txt_file.read_text(encoding="utf-8", errors="replace")
+        rows.append({"id": txt_file.stem, "text": text, "document_ids": [txt_file.stem]})
+
+    df = pd.DataFrame(rows).reset_index(drop=True)
+    await write_table_to_storage(df, "text_units", context.storage)
+    logger.info(f"Stage 1: wrote {len(df)} text units")
+
+
+async def _pipeline_2_stub(context):
+    """Minimal stub for pipeline_2 — creates an empty final_documents table."""
+    import pandas as pd
+    from graphrag.utils.storage import write_table_to_storage
+
+    df = pd.DataFrame(columns=["id", "title", "text", "text_unit_ids"])
+    await write_table_to_storage(df, "final_documents", context.storage)
+    logger.info("Stage 2: wrote stub final_documents")
+
+
 def run_pipeline_stages(input_dir: str, output_dir: str, stages: list[str], standard: str):
     _require_graphmert()
 
@@ -134,7 +168,7 @@ def run_pipeline_stages(input_dir: str, output_dir: str, stages: list[str], stan
 
     sys.path.insert(0, str(GRAPHMERT_DIR))
     from extract_kg import (
-        pipeline_1, pipeline_2, pipeline_4, pipeline_5,
+        pipeline_4, pipeline_5,
         load_extraction_config,
     )
 
@@ -145,12 +179,12 @@ def run_pipeline_stages(input_dir: str, output_dir: str, stages: list[str], stan
     extraction_config = load_extraction_config(str(extraction_config_path))
 
     if "1" in stages or "all" in stages:
-        logger.info("Stage 1: Creating base text units...")
-        asyncio.run(pipeline_1(config, context, callback_chain))
+        logger.info("Stage 1: Creating base text units (lightweight, no spacy/torch)...")
+        asyncio.run(_pipeline_1_simple(context, config.input.base_dir))
 
     if "2" in stages or "all" in stages:
-        logger.info("Stage 2: Creating final documents...")
-        asyncio.run(pipeline_2(config, context, callback_chain))
+        logger.info("Stage 2: Creating final documents (stub)...")
+        asyncio.run(_pipeline_2_stub(context))
 
     if "3" in stages or "all" in stages:
         logger.info("Stage 3: Extracting graph with LLM...")
