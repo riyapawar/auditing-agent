@@ -55,12 +55,12 @@ def _require_graphmert():
 
 def _build_graphrag_settings(input_dir: str, output_dir: str) -> Path:
     """Write a minimal settings.yaml for GraphRAG pointing at our input/output dirs."""
-    # Use absolute paths — GraphRAG resolves relative paths against root_dir
-    # which causes doubling if root_dir itself is relative
-    abs_input = str(Path(input_dir).resolve())
-    abs_output = str(Path(output_dir).resolve())
-    abs_artifacts = str(Path(output_dir).resolve() / "artifacts")
-    abs_cache = str(Path(output_dir).resolve() / "cache")
+    # Use absolute paths with forward slashes — backslashes in YAML double-quoted
+    # strings are escape sequences, so C:\Users breaks YAML parsing on Windows
+    abs_input = str(Path(input_dir).resolve()).replace("\\", "/")
+    abs_output = str(Path(output_dir).resolve()).replace("\\", "/")
+    abs_artifacts = str((Path(output_dir).resolve() / "artifacts")).replace("\\", "/")
+    abs_cache = str((Path(output_dir).resolve() / "cache")).replace("\\", "/")
 
     settings_path = Path(output_dir) / "settings.yaml"
     settings_path.parent.mkdir(parents=True, exist_ok=True)
