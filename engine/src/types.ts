@@ -36,13 +36,30 @@ export interface Assertion {
 
 export type RuleStatus = "pending_review" | "approved" | "rejected";
 
+/** What a rule is actually capable of testing.
+ *
+ *  tautological  — asserts existence of the same field its condition requires
+ *                  to exist, so it passes whenever it applies and never fails.
+ *  presence_only — checks a field is present or absent, with no value, range,
+ *                  or set. Sometimes legitimate, but not a substantive test.
+ *  testable      — compares against a value, range, or set membership.
+ *
+ *  Assigned by extraction/backfill_provenance.py. Surfacing it is what keeps a
+ *  review queue of hundreds usable: without it, a rule that can never fail is
+ *  indistinguishable from a real one until you read its JSON.
+ */
+export type RuleQuality = "testable" | "presence_only" | "tautological";
+
 export interface AuditRule {
   id: string;                 // e.g. "ASC606-R-0001"
   standard: string;           // e.g. "ASC 606"
-  section: string;            // e.g. "606-10-25-1"
+  section: string;            // e.g. "10.11.30" — read off the source paragraph
+  section_title?: string;     // the heading that follows it
   version: string;            // e.g. "2014-09" — used for temporal rule matching
   description: string;
   source_text: string;        // original regulatory paragraph
+  text_unit_ids?: string[];   // GraphRAG text units this was extracted from
+  quality?: RuleQuality;
   applies_to: string[];       // transaction types this rule tests
   depends_on: string[];       // rule IDs that must be evaluated first (DAG edges)
   condition: Condition;       // when to apply the assertion
@@ -50,7 +67,16 @@ export interface AuditRule {
   status: RuleStatus;
   approved_by?: string;
   approved_at?: string;
-  content_hash: string;       // SHA-256 of rule content for tamper detection
+  content_hash: string;       // SHA-256 over everything — tamper detection
+  /** Digest over only the fields a reviewer signs off on: description,
+   *  applies_to, depends_on, condition, assertion.
+   *
+   *  Separate from content_hash because adding a citation is new evidence
+   *  *about* a rule, not a change to what it asserts. Hashing them together
+   *  meant backfilling provenance invalidated every approval, which would
+   *  push reviewers toward re-approving in bulk — the opposite of the point. */
+  logic_hash?: string;
+  content_hash_before_backfill?: string;
   // KG provenance — the graph edges this rule was derived from
   kg_source?: string;
   kg_relation?: string;

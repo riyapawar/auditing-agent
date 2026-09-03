@@ -23,6 +23,7 @@ Or call classify_rules() directly from run_audit_pipeline.py.
 
 import json
 import hashlib
+import re
 import argparse
 import logging
 from pathlib import Path
@@ -67,9 +68,11 @@ RULE_TEMPLATE = {
     "id": "",
     "standard": "",
     "section": "",
+    "section_title": "",
     "version": "latest",
     "description": "",
     "source_text": "",
+    "text_unit_ids": [],
     "applies_to": [],
     "depends_on": [],
     "condition": {},
@@ -261,14 +264,21 @@ def classify_rules(
         logger.warning("No assertable relationships found. KG may need re-extraction.")
         return []
 
-    # Build prompts
+    # Build prompts.
+    #
+    # The source text is kept per row rather than discarded after prompt
+    # construction. It used to be a loop-local, so the rule-building loop below
+    # wrote source_text="" into every rule -- the paragraph was loaded, shown to
+    # the classifier, and then thrown away, leaving 656 rules that cite nothing.
     prompts = []
+    row_source_text: list[str] = []
+    row_chunk_id: list[str] = []
     for _, row in assertable_rels.iterrows():
         desc = ", ".join(_to_list(row["description"]))
-        source_text = _load_source_text(
-            entity_text_units.get(str(row["source"]).upper(), [""])[0],
-            chunks_dir
-        )
+        chunk_id = entity_text_units.get(str(row["source"]).upper(), [""])[0]
+        source_text = _load_source_text(chunk_id, chunks_dir)
+        row_source_text.append(source_text)
+        row_chunk_id.append(chunk_id)
         prompt = (
             CLASSIFICATION_PROMPT
             .replace("{source}", str(row["source"]))
@@ -290,7 +300,7 @@ def classify_rules(
     # Parse and build rules
     rules = []
     rule_counter = 0
-    for (_, row), response in zip(assertable_rels.iterrows(), responses):
+    for idx, ((_, row), response) in enumerate(zip(assertable_rels.iterrows(), responses)):
         parsed = _parse_llm_json(response)
         if not parsed:
             logger.warning(f"Failed to parse LLM response for {row['source']} -> {row['target']}")
@@ -305,13 +315,16 @@ def classify_rules(
             logger.debug(f"Skipping low-confidence no-structure: {row['source']} -> {row['target']}")
             continue
 
-        # Extract section from source entity if it looks like a section ID
-        section = ""
-        source_upper = str(row["source"]).upper()
-        if any(c.isdigit() for c in source_upper):
-            section = str(row["source"])
-        elif any(c.isdigit() for c in str(row["target"]).upper()):
-            section = str(row["target"])
+        # Section is read off the front of the source paragraph, which begins
+        # with its own number in every one of the 426 chunks. The previous
+        # heuristic -- use the KG entity name if it contains a digit -- left 80%
+        # of rules with no section and filled the rest with entity names rather
+        # than citations.
+        source_text = row_source_text[idx] if idx < len(row_source_text) else ""
+        section, section_title = "", ""
+        m = re.match(r"^\s*(\d+(?:\.\d+)*)\s+([^\n]{0,80})", source_text or "")
+        if m:
+            section, section_title = m.group(1), m.group(2).strip()
 
         rule_counter += 1
         rule = {
@@ -319,8 +332,10 @@ def classify_rules(
             "id": f"{standard.replace(' ', '').upper()}-R-{rule_counter:04d}",
             "standard": standard,
             "section": section,
+            "section_title": section_title,
             "description": parsed.get("description", f"{row['source']} {row['description']} {row['target']}"),
-            "source_text": "",
+            "source_text": (source_text or "")[:2000],
+            "text_unit_ids": [row_chunk_id[idx]] if idx < len(row_chunk_id) and row_chunk_id[idx] else [],
             "applies_to": parsed.get("applies_to", []),
             "depends_on": [],
             "condition": parsed.get("condition", {}),
