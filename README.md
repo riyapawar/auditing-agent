@@ -192,7 +192,8 @@ python run_audit_pipeline.py \
 
 # 2. restore provenance and grade rule quality
 python backfill_provenance.py --rules ../data/rules.json \
-  --artifacts ../output/asc606/artifacts        # --dry-run to preview
+  --artifacts ../output/asc606/artifacts \
+  --export-redacted ../data/rules.public.json   # --dry-run to preview
 
 # 3. build the engine, then run the rules over the sample transactions
 cd ../engine && npm install && npm run build
@@ -205,6 +206,19 @@ cd app && npm install && npm run dev
 Nothing in `engine/` or `app/` calls a model. Once rules exist, evaluation is
 deterministic — which is the property that makes a run reproducible and a
 verdict defensible.
+
+## On the regulation text
+
+`chunks/` is FASB ASC 606 and KPMG handbook material — copyrighted, so it is not
+redistributed here, and `data/rules.json` is excluded for the same reason: since
+provenance was restored, each rule carries up to 2,000 characters of that text in
+`source_text`.
+
+`data/rules.public.json` **is** committed. It is the same 656 rules with
+`source_text` replaced by a `source_citation` (`ASC 606 §10.11.30 Application of
+royalty exception`) — enough to locate the paragraph in your own copy of the
+standard, not enough to reproduce it. That keeps the rule set, the quality
+grades, and the KG provenance inspectable without republishing the source.
 
 ## Limits
 

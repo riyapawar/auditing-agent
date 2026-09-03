@@ -169,6 +169,14 @@ def main() -> None:
     ap.add_argument("--artifacts", default="output/asc606/artifacts")
     ap.add_argument("--max-source-chars", type=int, default=2000)
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument(
+        "--export-redacted",
+        metavar="PATH",
+        help="also write a shareable copy with source_text replaced by a citation. "
+             "The chunks are FASB ASC 606 and KPMG handbook excerpts -- copyrighted "
+             "-- which is why chunks/ and data/rules.json are gitignored. This lets "
+             "the rule set be published without redistributing the standard.",
+    )
     args = ap.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
@@ -233,6 +241,26 @@ def main() -> None:
 
     rules_path.write_text(json.dumps(rules, indent=2), encoding="utf-8")
     log.info("wrote %s", rules_path)
+
+    if args.export_redacted:
+        redacted = []
+        for r in rules:
+            c = dict(r)
+            if c.get("source_text"):
+                # Keep enough to locate the paragraph, not enough to reproduce it.
+                c["source_text"] = ""
+                c["source_citation"] = (
+                    f"ASC 606 §{c.get('section','?')} "
+                    f"{c.get('section_title','')}".strip()
+                )
+                c["source_text_redacted"] = True
+            redacted.append(c)
+        out = Path(args.export_redacted)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(redacted, indent=2), encoding="utf-8")
+        log.info(
+            "wrote %s (%d rules, source_text replaced by citation)", out, len(redacted)
+        )
 
 
 if __name__ == "__main__":

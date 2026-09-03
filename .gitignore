@@ -19,9 +19,19 @@ venv/
 # Runtime data
 data/logs/
 data/runs.json
-data/rules.json
 output/
+
+# chunks/ is FASB ASC 606 and KPMG handbook text -- copyrighted, so it is not
+# redistributed here. data/rules.json is excluded for the same reason: since
+# provenance was restored, each rule carries up to 2000 characters of that text
+# in source_text, which makes the file ~2MB of the standard.
 chunks/
+data/rules.json
+
+# ...but the rule set itself is the interesting artifact, and it is publishable
+# once the regulation text is stripped. Produced by:
+#   python extraction/backfill_provenance.py --export-redacted data/rules.public.json
+!data/rules.public.json
 
 # Environment
 .env
