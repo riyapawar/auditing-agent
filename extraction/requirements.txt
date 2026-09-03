@@ -3,4 +3,5 @@ pyarrow
 pdfplumber
 openai
 pyyaml
+python-dotenv
 # vllm  # uncomment for local model inference (requires Linux + GPU)

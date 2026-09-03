@@ -19,7 +19,8 @@
       }
     ],
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "@auditing-agent/engine": ["../engine/dist/index.js"]
     }
   },
   "include": [

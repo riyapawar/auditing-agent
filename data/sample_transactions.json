@@ -1,0 +1,90 @@
+[
+  {
+    "id": "TX-2024-001",
+    "date": "2024-01-15",
+    "type": "license",
+    "fields": {
+      "transaction_type": "license",
+      "revenue_recognized": 120000,
+      "performance_obligation_satisfied": true,
+      "standalone_selling_price": 120000,
+      "variable_consideration_included": 0,
+      "delivery_status": "complete",
+      "contract_id": "C-1001"
+    }
+  },
+  {
+    "id": "TX-2024-002",
+    "date": "2024-01-22",
+    "type": "license",
+    "fields": {
+      "transaction_type": "license",
+      "revenue_recognized": 85000,
+      "performance_obligation_satisfied": false,
+      "delivery_status": "pending",
+      "contract_id": "C-1002"
+    }
+  },
+  {
+    "id": "TX-2024-003",
+    "date": "2024-02-01",
+    "type": "subscription_revenue",
+    "fields": {
+      "transaction_type": "subscription_revenue",
+      "revenue_recognized": 12000,
+      "standalone_selling_price": 12000,
+      "performance_obligation_satisfied": true,
+      "delivery_status": "complete",
+      "contract_id": "C-1003"
+    }
+  },
+  {
+    "id": "TX-2024-004",
+    "date": "2024-02-10",
+    "type": "subscription_revenue",
+    "fields": {
+      "transaction_type": "subscription_revenue",
+      "revenue_recognized": 9500,
+      "performance_obligation_satisfied": true,
+      "delivery_status": "complete",
+      "contract_id": "C-1004"
+    }
+  },
+  {
+    "id": "TX-2024-005",
+    "date": "2024-02-15",
+    "type": "sales_based_royalty",
+    "fields": {
+      "transaction_type": "sales_based_royalty",
+      "royalty_rate": 0.05,
+      "underlying_sales": 400000,
+      "delivery_status": "complete",
+      "contract_id": "C-1005"
+    }
+  },
+  {
+    "id": "TX-2024-006",
+    "date": "2024-03-01",
+    "type": "milestone_payment",
+    "fields": {
+      "transaction_type": "milestone_payment",
+      "revenue_recognized": 50000,
+      "standalone_selling_price": 50000,
+      "performance_obligation_satisfied": true,
+      "milestone_achieved": true,
+      "contract_id": "C-1006"
+    }
+  },
+  {
+    "id": "TX-2024-007",
+    "date": "2024-03-10",
+    "type": "license",
+    "fields": {
+      "transaction_type": "license",
+      "performance_obligation_satisfied": true,
+      "standalone_selling_price": 200000,
+      "delivery_status": "complete",
+      "contract_id": "C-1007"
+    }
+  }
+]

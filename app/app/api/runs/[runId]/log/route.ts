@@ -1,20 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import type { AuditLogEntry, AuditRunSummary } from "@/lib/types";
+import type { AuditLogEntry } from "@/lib/types";
+import { loadRuns, DATA_DIR } from "@/lib/db";
 
-const DATA_DIR = path.join(process.cwd(), "..", "data");
-const RUNS_PATH = path.join(DATA_DIR, "runs.json");
-
-export async function GET(_req: NextRequest, { params }: { params: { runId: string } }) {
-  if (!fs.existsSync(RUNS_PATH)) return NextResponse.json([]);
-  const runs: AuditRunSummary[] = JSON.parse(fs.readFileSync(RUNS_PATH, "utf-8"));
-  const run = runs.find((r) => r.run_id === params.runId);
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ runId: string }> }) {
+  const { runId } = await params;
+  const runs = loadRuns();
+  const run = runs.find((r) => r.run_id === runId);
   if (!run) return NextResponse.json([], { status: 404 });
 
-  if (!fs.existsSync(run.log_path)) return NextResponse.json([]);
+  const resolvedLogPath = path.resolve(run.log_path);
+  const allowedLogsDir = path.resolve(path.join(DATA_DIR, "logs"));
+  if (!resolvedLogPath.startsWith(allowedLogsDir)) {
+    return NextResponse.json({ error: "Access Denied: Invalid path" }, { status: 400 });
+  }
 
-  const lines = fs.readFileSync(run.log_path, "utf-8").split("\n").filter(Boolean);
+  if (!fs.existsSync(resolvedLogPath)) return NextResponse.json([]);
+
+  const lines = fs.readFileSync(resolvedLogPath, "utf-8").split("\n").filter(Boolean);
   const entries: AuditLogEntry[] = lines
     .map((l) => { try { return JSON.parse(l); } catch { return null; } })
     .filter(Boolean);

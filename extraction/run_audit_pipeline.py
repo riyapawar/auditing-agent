@@ -36,6 +36,16 @@ from pathlib import Path
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 logger = logging.getLogger(__name__)
 
+# Load .env from project root automatically
+try:
+    from dotenv import load_dotenv
+    _env = Path(__file__).parent.parent / ".env"
+    if _env.exists():
+        load_dotenv(_env)
+        logger.info(f"Loaded .env from {_env}")
+except ImportError:
+    pass
+
 SCRIPT_DIR = Path(__file__).parent
 GRAPHMERT_DIR = Path(
     os.environ.get("GRAPHMERT_DIR", str(SCRIPT_DIR.parent.parent / "graphmert" / "graphrag"))
@@ -187,8 +197,8 @@ def run_pipeline_stages(input_dir: str, output_dir: str, stages: list[str], stan
         asyncio.run(_pipeline_2_stub(context))
 
     if "3" in stages or "all" in stages:
-        logger.info("Stage 3: Extracting graph with LLM...")
-        asyncio.run(pipeline_3(context, extraction_config))
+        logger.info("Stage 3: Extracting graph with LLM (gpt-4o-mini, 5 concurrent)...")
+        asyncio.run(pipeline_3(context, extraction_config, output_dir=output_dir))
 
     if "4" in stages or "all" in stages:
         logger.info("Stage 4: Parsing entities and relationships...")
@@ -200,10 +210,10 @@ def run_pipeline_stages(input_dir: str, output_dir: str, stages: list[str], stan
 
     if "6" in stages or "all" in stages:
         logger.info("Stage 6: Classifying relationships into executable rules...")
-        _run_stage6(output_dir, standard)
+        _run_stage6(output_dir, standard, input_dir=input_dir)
 
 
-def _run_stage6(output_dir: str, standard: str):
+def _run_stage6(output_dir: str, standard: str, input_dir: str = None):
     from stage6_rule_classifier import classify_rules
 
     artifacts_dir = Path(output_dir) / "artifacts"
@@ -220,6 +230,8 @@ def _run_stage6(output_dir: str, standard: str):
         relationships_path=str(relationships_path),
         standard=standard,
         output_path=str(rules_output_path),
+        chunks_dir=input_dir,
+        min_confidence=0.2,
     )
     logger.info(f"Executable rules written to {rules_output_path}")
 

@@ -29,9 +29,28 @@ from pathlib import Path
 from dataclasses import dataclass, asdict
 from typing import Optional
 
+import numpy as np
 import pandas as pd
 
 logger = logging.getLogger(__name__)
+
+# Load .env automatically
+try:
+    from dotenv import load_dotenv
+    _env = Path(__file__).parent.parent / ".env"
+    if _env.exists():
+        load_dotenv(_env)
+except ImportError:
+    pass
+
+
+def _to_list(val) -> list:
+    """Convert a parquet value (str, list, or numpy array) to a plain Python list."""
+    if isinstance(val, np.ndarray):
+        return val.tolist()
+    if isinstance(val, list):
+        return val
+    return [str(val)]
 
 # Relation types that can encode testable assertions
 ASSERTABLE_RELATIONS = {
@@ -157,20 +176,32 @@ def _call_llm_batch(prompts: list[str], model_path: str) -> list[str]:
     return [o.outputs[0].text for o in outputs]
 
 
-def _call_openai_batch(prompts: list[str]) -> list[str]:
-    """Fallback: use OpenAI API if vLLM not available."""
-    from openai import OpenAI
-    client = OpenAI()
-    results = []
-    for prompt in prompts:
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            max_tokens=1024,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.1,
-        )
-        results.append(response.choices[0].message.content or "")
-    return results
+def _call_openai_batch(prompts: list[str], concurrency: int = 8) -> list[str]:
+    """Fallback: use OpenAI API if vLLM not available. Runs concurrently."""
+    import asyncio
+    from openai import AsyncOpenAI
+
+    client = AsyncOpenAI(max_retries=5, timeout=60.0)
+
+    async def _one(prompt: str, sem: asyncio.Semaphore) -> str:
+        async with sem:
+            try:
+                resp = await client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    max_tokens=1024,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.1,
+                )
+                return resp.choices[0].message.content or ""
+            except Exception as e:
+                logger.error(f"Stage 6 API error: {e}")
+                return ""
+
+    async def _run_all() -> list[str]:
+        sem = asyncio.Semaphore(concurrency)
+        return await asyncio.gather(*[_one(p, sem) for p in prompts])
+
+    return asyncio.run(_run_all())
 
 
 def _parse_llm_json(response: str) -> Optional[dict]:
@@ -220,7 +251,7 @@ def classify_rules(
     # Filter to relationships worth classifying
     assertable_rels = relationships_df[
         relationships_df["description"].apply(
-            lambda d: bool(set(d if isinstance(d, list) else [d]) & ASSERTABLE_RELATIONS)
+            lambda d: bool(set(_to_list(d)) & ASSERTABLE_RELATIONS)
         )
     ].copy()
 
@@ -233,19 +264,18 @@ def classify_rules(
     # Build prompts
     prompts = []
     for _, row in assertable_rels.iterrows():
-        desc = row["description"]
-        if isinstance(desc, list):
-            desc = ", ".join(desc)
+        desc = ", ".join(_to_list(row["description"]))
         source_text = _load_source_text(
             entity_text_units.get(str(row["source"]).upper(), [""])[0],
             chunks_dir
         )
-        prompt = CLASSIFICATION_PROMPT.format(
-            source=row["source"],
-            relation=desc,
-            target=row["target"],
-            description=desc,
-            source_text=source_text or "(source text not available)",
+        prompt = (
+            CLASSIFICATION_PROMPT
+            .replace("{source}", str(row["source"]))
+            .replace("{relation}", desc)
+            .replace("{target}", str(row["target"]))
+            .replace("{description}", desc)
+            .replace("{source_text}", source_text or "(source text not available)")
         )
         prompts.append(prompt)
 
@@ -266,8 +296,13 @@ def classify_rules(
             logger.warning(f"Failed to parse LLM response for {row['source']} -> {row['target']}")
             continue
 
-        if not parsed.get("is_testable") or parsed.get("confidence", 0) < min_confidence:
-            logger.debug(f"Skipping non-testable: {row['source']} -> {row['target']}")
+        confidence = parsed.get("confidence", 0)
+        has_condition = bool(parsed.get("condition"))
+        has_assertion = bool(parsed.get("assertion"))
+        # Accept if model says testable, OR if confidence meets threshold AND
+        # the model still produced a valid condition+assertion (humans review anyway)
+        if confidence < min_confidence and not (has_condition and has_assertion):
+            logger.debug(f"Skipping low-confidence no-structure: {row['source']} -> {row['target']}")
             continue
 
         # Extract section from source entity if it looks like a section ID

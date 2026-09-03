@@ -42,33 +42,46 @@ export default async function DashboardPage() {
   const totalViolations = runs.reduce((s, r) => s + r.violations, 0);
 
   return (
-    <main className="min-h-screen bg-gray-50">
-      <nav className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-lg font-semibold text-gray-900">AuditGraph</span>
-          <span className="text-xs text-gray-400 border border-gray-200 px-2 py-0.5 rounded-full">
-            Deterministic Audit Engine
+    <main className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans relative overflow-hidden">
+      {/* Dynamic Background Glowing Auras */}
+      <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-indigo-500/10 blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-cyan-500/10 blur-[120px] pointer-events-none" />
+
+      {/* Navigation */}
+      <nav className="border-b border-slate-905 bg-slate-950/80 backdrop-blur-md px-6 py-4 flex items-center justify-between sticky top-0 z-50">
+        <div className="flex items-center gap-3">
+          <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-cyan-400">
+            AuditGraph
+          </span>
+          <span className="text-[10px] uppercase tracking-wider text-slate-500 border border-slate-900 px-2 py-0.5 rounded-full font-mono">
+            Deterministic Engine
           </span>
         </div>
-        <div className="flex items-center gap-4 text-sm">
-          <Link href="/rules" className="text-gray-500 hover:text-gray-900">Rule Library</Link>
-          <Link href="/review" className="text-gray-500 hover:text-gray-900">Review Queue</Link>
+        <div className="flex items-center gap-6 text-sm">
+          <Link href="/rules" className="text-slate-400 hover:text-slate-200 transition-colors btn-active-scale">Rule Library</Link>
+          <Link href="/review" className="text-slate-400 hover:text-slate-200 transition-colors btn-active-scale">Review Queue</Link>
           <Link
             href="/run/new"
-            className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded text-sm transition-colors"
+            className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2 rounded-lg text-xs shadow-lg shadow-indigo-500/10 btn-active-scale inline-block"
           >
             New Audit Run
           </Link>
         </div>
       </nav>
 
-      <div className="max-w-6xl mx-auto px-6 py-8">
-        <h1 className="text-2xl font-semibold text-gray-900 mb-1">Dashboard</h1>
-        <p className="text-sm text-gray-500 mb-8">
-          All transactions tested against 100% of applicable rules. Every result is traceable to a specific regulatory paragraph.
-        </p>
+      {/* Main Content Area */}
+      <div className="flex-1 max-w-6xl w-full mx-auto px-6 py-10 flex flex-col gap-8 z-10">
+        <div>
+          <h1 className="text-3xl font-extrabold text-white tracking-tight">
+            Dashboard
+          </h1>
+          <p className="text-sm text-slate-400 mt-1">
+            Transaction compliance checks mapping 100% trace lineage back to regulation guidelines.
+          </p>
+        </div>
 
-        <div className="grid grid-cols-4 gap-4 mb-8">
+        {/* Stats Grid */}
+        <div className="grid grid-cols-4 gap-5">
           <StatCard label="Rules Approved" value={ruleStats.approved} />
           <StatCard label="Pending Review" value={ruleStats.pending} accent="yellow" href="/review" />
           <StatCard label="Transactions Tested" value={totalTested.toLocaleString()} />
@@ -79,65 +92,70 @@ export default async function DashboardPage() {
           />
         </div>
 
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-            <h2 className="font-medium text-gray-900">Recent Audit Runs</h2>
-            <Link href="/run/new" className="text-xs text-indigo-600 hover:text-indigo-800">
-              Start new run
+        {/* Audit Runs Table */}
+        <div className="bg-slate-900/50 backdrop-blur-md rounded-xl border border-slate-800/80 overflow-hidden shadow-2xl">
+          <div className="px-6 py-5 border-b border-slate-800/60 flex items-center justify-between">
+            <h2 className="text-base font-bold text-white">Recent Audit Runs</h2>
+            <Link href="/run/new" className="text-xs text-indigo-400 hover:text-indigo-300 font-semibold flex items-center gap-1 btn-active-scale">
+              Start new run →
             </Link>
           </div>
           {runs.length === 0 ? (
-            <div className="px-5 py-10 text-center text-sm text-gray-400">
-              No audit runs yet.{" "}
-              <Link href="/review" className="text-indigo-600 underline">
+            <div className="px-6 py-16 text-center text-sm text-slate-500">
+              No audit runs executed yet.{" "}
+              <Link href="/review" className="text-indigo-400 hover:underline btn-active-scale">
                 Review pending rules
               </Link>{" "}
-              first, then start a run.
+              first, then trigger a run.
             </div>
           ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100 text-xs text-gray-400 uppercase tracking-wider">
-                  <th className="text-left px-5 py-3">Run ID</th>
-                  <th className="text-left px-5 py-3">Standard</th>
-                  <th className="text-left px-5 py-3">Date</th>
-                  <th className="text-right px-5 py-3">Transactions</th>
-                  <th className="text-right px-5 py-3">Rules</th>
-                  <th className="text-right px-5 py-3">Violations</th>
-                  <th className="px-5 py-3" />
-                </tr>
-              </thead>
-              <tbody>
-                {runs.map((run) => (
-                  <tr key={run.run_id} className="border-b border-gray-50 hover:bg-gray-50">
-                    <td className="px-5 py-3 font-mono text-xs text-gray-500">
-                      {run.run_id.slice(0, 8)}
-                    </td>
-                    <td className="px-5 py-3 text-gray-700">{run.standard}</td>
-                    <td className="px-5 py-3 text-gray-500">
-                      {new Date(run.started_at).toLocaleDateString()}
-                    </td>
-                    <td className="px-5 py-3 text-right text-gray-700">
-                      {run.transactions_tested.toLocaleString()}
-                    </td>
-                    <td className="px-5 py-3 text-right text-gray-700">{run.rules_applied}</td>
-                    <td className="px-5 py-3 text-right">
-                      <span className={`font-medium ${run.violations > 0 ? "text-red-600" : "text-green-600"}`}>
-                        {run.violations}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3 text-right">
-                      <Link
-                        href={`/trace/${run.run_id}`}
-                        className="text-xs text-indigo-500 hover:text-indigo-700 underline"
-                      >
-                        View
-                      </Link>
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-800/60 text-[10px] text-slate-500 uppercase tracking-wider font-mono">
+                    <th className="px-6 py-3.5">Run ID</th>
+                    <th className="px-6 py-3.5">Standard</th>
+                    <th className="px-6 py-3.5">Execution Date</th>
+                    <th className="px-6 py-3.5 text-right">Transactions</th>
+                    <th className="px-6 py-3.5 text-right">Rules Applied</th>
+                    <th className="px-6 py-3.5 text-right">Violations</th>
+                    <th className="px-6 py-3.5" />
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-800/40">
+                  {runs.map((run) => (
+                    <tr key={run.run_id} className="hover:bg-slate-900/40 transition-colors">
+                      <td className="px-6 py-4 font-mono text-xs text-slate-400">
+                        {run.run_id.slice(0, 8)}
+                      </td>
+                      <td className="px-6 py-4 font-medium text-slate-200">{run.standard}</td>
+                      <td className="px-6 py-4 text-xs text-slate-400">
+                        {new Date(run.started_at).toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4 text-right font-mono text-slate-300">
+                        {run.transactions_tested.toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4 text-right font-mono text-slate-300">{run.rules_applied}</td>
+                      <td className="px-6 py-4 text-right">
+                        <span className={`font-mono font-bold text-xs px-2.5 py-1 rounded-full ${
+                          run.violations > 0 ? "bg-rose-500/10 text-rose-400 border border-rose-500/20" : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                        }`}>
+                          {run.violations > 0 ? `${run.violations} Violations` : "Clean"}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <Link
+                          href={`/trace/${run.run_id}`}
+                          className="text-xs text-indigo-400 hover:text-indigo-300 font-semibold hover:underline btn-active-scale inline-block"
+                        >
+                          View Trace
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       </div>
@@ -156,18 +174,22 @@ function StatCard({
   accent?: "red" | "green" | "yellow";
   href?: string;
 }) {
-  const colors: Record<string, string> = {
-    red: "text-red-600",
-    green: "text-green-600",
-    yellow: "text-yellow-600",
-  };
   const card = (
-    <div className="bg-white border border-gray-200 rounded-lg px-5 py-4">
-      <div className="text-xs text-gray-400 mb-1">{label}</div>
-      <div className={`text-2xl font-semibold ${accent ? colors[accent] : "text-gray-900"}`}>
+    <div className="bg-slate-900/50 backdrop-blur-md border border-slate-800/80 rounded-xl px-5 py-4 shadow-xl card-hover-glow relative overflow-hidden group">
+      <div className="absolute inset-0 bg-gradient-to-tr from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+      <div className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider font-mono mb-1">{label}</div>
+      <div className={`text-2xl font-black ${
+        accent === "red" 
+          ? "text-rose-400 font-mono" 
+          : accent === "green" 
+          ? "text-emerald-400 font-mono" 
+          : accent === "yellow" 
+          ? "text-amber-400 font-mono" 
+          : "text-white"
+      }`}>
         {value}
       </div>
     </div>
   );
-  return href ? <Link href={href}>{card}</Link> : card;
+  return href ? <Link href={href} className="btn-active-scale">{card}</Link> : card;
 }

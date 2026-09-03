@@ -1,28 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import fs from "fs";
 import path from "path";
-import type { AuditRule, AuditRunSummary, Transaction } from "@/lib/types";
-
-const DATA_DIR = path.join(process.cwd(), "..", "data");
-const RULES_PATH = path.join(DATA_DIR, "rules.json");
-const RUNS_PATH = path.join(DATA_DIR, "runs.json");
-
-function loadRules(): AuditRule[] {
-  if (!fs.existsSync(RULES_PATH)) return [];
-  return JSON.parse(fs.readFileSync(RULES_PATH, "utf-8"));
-}
-
-function loadRuns(): AuditRunSummary[] {
-  if (!fs.existsSync(RUNS_PATH)) return [];
-  return JSON.parse(fs.readFileSync(RUNS_PATH, "utf-8"));
-}
-
-function saveRun(run: AuditRunSummary): void {
-  const runs = loadRuns();
-  runs.unshift(run);
-  fs.mkdirSync(path.dirname(RUNS_PATH), { recursive: true });
-  fs.writeFileSync(RUNS_PATH, JSON.stringify(runs, null, 2));
-}
+import { AuditExecutor } from "@auditing-agent/engine";
+import type { Transaction } from "@/lib/types";
+import { loadRules, loadRuns, saveRun, DATA_DIR } from "@/lib/db";
 
 export async function GET() {
   return NextResponse.json(loadRuns());
@@ -48,22 +28,17 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Import engine dynamically — only works when engine is built
-  // For development, run: cd engine && npm run build
-  let AuditExecutor: typeof import("@auditing-agent/engine").AuditExecutor;
+  const logPath = path.join(DATA_DIR, "logs", `${Date.now()}.jsonl`);
+  
   try {
-    ({ AuditExecutor } = await import("@auditing-agent/engine" as never as string));
-  } catch {
+    const executor = new AuditExecutor(approvedRules, { logPath });
+    const summary = await executor.run(transactions, standard);
+    saveRun(summary);
+    return NextResponse.json(summary);
+  } catch (err: any) {
     return NextResponse.json(
-      { error: "Engine not built. Run: cd engine && npm run build" },
+      { error: `Failed to run engine: ${err.message}` },
       { status: 500 }
     );
   }
-
-  const logPath = path.join(DATA_DIR, "logs", `${Date.now()}.jsonl`);
-  const executor = new AuditExecutor(approvedRules, { logPath });
-  const summary = await executor.run(transactions, standard);
-
-  saveRun(summary);
-  return NextResponse.json(summary);
 }

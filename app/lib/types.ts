@@ -76,3 +76,10 @@ export interface AuditRunSummary {
   by_rule: Record<string, { tested: number; violations: number }>;
   log_path: string;
 }
+
+export interface Transaction {
+  id: string;
+  date: string;
+  type: string;
+  fields: Record<string, unknown>;
+}

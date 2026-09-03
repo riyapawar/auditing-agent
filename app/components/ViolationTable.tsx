@@ -11,7 +11,7 @@ interface Props {
 export function ViolationTable({ violations, runId }: Props) {
   if (violations.length === 0) {
     return (
-      <div className="text-center py-12 text-gray-400 text-sm">
+      <div className="text-center py-12 text-slate-500 text-sm">
         No violations found — all transactions passed.
       </div>
     );
@@ -21,52 +21,40 @@ export function ViolationTable({ violations, runId }: Props) {
     <div className="overflow-x-auto">
       <table className="w-full text-sm text-left border-collapse">
         <thead>
-          <tr className="border-b border-gray-200">
-            <th className="py-2 px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-              Transaction
-            </th>
-            <th className="py-2 px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-              Rule
-            </th>
-            <th className="py-2 px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-              Section
-            </th>
-            <th className="py-2 px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-              Violation
-            </th>
-            <th className="py-2 px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-              Time
-            </th>
-            <th className="py-2 px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-              Trace
-            </th>
+          <tr className="border-b border-slate-800 text-[10px] text-slate-500 uppercase tracking-wider font-mono">
+            <th className="py-3 px-4">Transaction</th>
+            <th className="py-3 px-4">Rule</th>
+            <th className="py-3 px-4">Section</th>
+            <th className="py-3 px-4">Violation</th>
+            <th className="py-3 px-4">Time</th>
+            <th className="py-3 px-4">Trace</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody className="divide-y divide-slate-800/40">
           {violations.map((v, i) => (
             <tr
               key={`${v.transaction_id}-${v.rule_id}-${i}`}
-              className="border-b border-gray-100 hover:bg-red-50 transition-colors"
+              className="hover:bg-slate-900/40 transition-colors"
             >
-              <td className="py-2 px-3 font-mono text-xs text-gray-700">
+              <td className="py-3.5 px-4 font-mono text-xs text-slate-400">
                 {v.transaction_id}
               </td>
-              <td className="py-2 px-3 font-mono text-xs text-indigo-600">
+              <td className="py-3.5 px-4 font-mono text-xs text-indigo-400 font-semibold">
                 {v.rule_id}
               </td>
-              <td className="py-2 px-3 text-xs text-gray-500">
-                {v.rule_section}
+              <td className="py-3.5 px-4 text-xs text-slate-550 font-mono">
+                § {v.rule_section}
               </td>
-              <td className="py-2 px-3 text-xs text-red-600 max-w-xs truncate" title={v.violation_message}>
+              <td className="py-3.5 px-4 text-xs text-rose-400 max-w-xs truncate" title={v.violation_message}>
                 {v.violation_message ?? "—"}
               </td>
-              <td className="py-2 px-3 text-xs text-gray-400">
+              <td className="py-3.5 px-4 text-xs text-slate-500 font-mono">
                 {new Date(v.timestamp).toLocaleTimeString()}
               </td>
-              <td className="py-2 px-3">
+              <td className="py-3.5 px-4 font-mono text-xs">
                 <Link
                   href={`/trace/${runId}?tx=${v.transaction_id}`}
-                  className="text-xs text-indigo-500 hover:text-indigo-700 underline"
+                  className="text-xs text-indigo-400 hover:text-indigo-300 font-semibold hover:underline btn-active-scale inline-block"
                 >
                   View trace
                 </Link>
@@ -75,7 +63,7 @@ export function ViolationTable({ violations, runId }: Props) {
           ))}
         </tbody>
       </table>
-      <div className="mt-2 text-xs text-gray-400 px-3">
+      <div className="mt-4 text-xs text-slate-500 px-4 font-mono">
         {violations.length} violation{violations.length !== 1 ? "s" : ""}
       </div>
     </div>
